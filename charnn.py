@@ -22,7 +22,11 @@ def char_maps(text: str):
     # It's best if you also sort the chars before assigning indices, so that
     # they're in lexical order.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    sorted_letters = sorted(set(text))
+    idx_to_char = {}
+    for i in range (len(sorted_letters)):
+        idx_to_char[i]=sorted_letters[i]
+    char_to_idx = dict([[v,k] for k,v in idx_to_char.items()])
     # ========================
     return char_to_idx, idx_to_char
 
@@ -38,7 +42,11 @@ def remove_chars(text: str, chars_to_remove):
     """
     # TODO: Implement according to the docstring.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    beforeletters=len(text)
+    for i in range(len(chars_to_remove)):
+        text=text.replace(chars_to_remove[i],"")
+    n_removed=beforeletters-len(text)
+    text_clean=text
     # ========================
     return text_clean, n_removed
 
@@ -58,7 +66,10 @@ def chars_to_onehot(text: str, char_to_idx: dict) -> Tensor:
     """
     # TODO: Implement the embedding.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    result = torch.zeros([len(text),len(char_to_idx)],dtype=torch.int8)
+    for i in range (len(text)):
+        j=char_to_idx[text[i]]
+        result[i,j]=1
     # ========================
     return result
 
@@ -75,7 +86,16 @@ def onehot_to_chars(embedded_text: Tensor, idx_to_char: dict) -> str:
     """
     # TODO: Implement the reverse-embedding.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    letters= torch.argmax(embedded_text,dim=1)
+    let = letters.numpy()
+    result = []
+    for i in range(len(letters)):
+#         idx = letters[i].numpy()
+#         index = 0
+#         index = idx[0,0]
+        letter=idx_to_char[let[i]]
+        result.append(letter)
+    result=''.join(result)
     # ========================
     return result
 
@@ -104,7 +124,21 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int,
     # 3. Create the labels tensor in a similar way and convert to indices.
     # Note that no explicit loops are required to implement this function.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    #embedded_text=chars_to_onehot(text,char_to_idx)
+    samples = torch.zeros([(len(text)-1)//seq_len,seq_len,len(char_to_idx)],dtype=torch.int8)
+    tensor = torch.zeros((),dtype=torch.int8)
+    labels = tensor.new_empty([(len(text)-1)//seq_len,seq_len])
+    i=0
+    for letter in text:
+        embedded_letter = chars_to_onehot(letter,char_to_idx)
+        index = torch.argmax(embedded_letter,dim=1).numpy()
+        if ( i < len(text)-seq_len):
+            samples[i//seq_len,i%seq_len,index]=1
+        if ( i >= 1 and i <= len(text)-seq_len):
+            labels[(i-1)//seq_len,(i-1)%seq_len]=char_to_idx[letter]
+        i+=1
+            
+        
     # ========================
     return samples, labels
 
