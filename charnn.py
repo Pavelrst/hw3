@@ -124,12 +124,18 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int,
     # 3. Create the labels tensor in a similar way and convert to indices.
     # Note that no explicit loops are required to implement this function.
     # ====== YOUR CODE: ======
+    print('chars_to_labelled_samples called')
+    print("length of test is = ",len(text))
     #embedded_text=chars_to_onehot(text,char_to_idx)
     samples = torch.zeros([(len(text)-1)//seq_len,seq_len,len(char_to_idx)],dtype=torch.int8)
     tensor = torch.zeros((),dtype=torch.int8)
     labels = tensor.new_empty([(len(text)-1)//seq_len,seq_len])
     i=0
+    indicator = 0
     for letter in text:
+        indicator+=1
+        if indicator%50000 == 0:
+            print (indicator," letters processed")
         embedded_letter = chars_to_onehot(letter,char_to_idx)
         index = torch.argmax(embedded_letter,dim=1).numpy()
         if ( i < len(text)-seq_len):
@@ -154,7 +160,7 @@ def hot_softmax(y, dim=0, temperature=1.0):
     """
     # TODO: Implement based on the above.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    result = torch.nn.functional.softmax(y/temperature, dim=dim)
     # ========================
     return result
 
@@ -234,7 +240,51 @@ class MultilayerGRU(nn.Module):
         #     then call self.register_parameter() on them. Also make
         #     sure to initialize them. See functions in torch.nn.init.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        print ('init called')
+        # TODO: create a list of parameters of layers using n_layers.
+
+        in_features = self.in_dim
+        out_features = self.h_dim
+        for layer in range(self.n_layers):
+
+            # For first layer we have different out dimension.
+            if layer > 0:
+                x_in_features = self.h_dim
+                h_in_features = self.h_dim
+            else:
+                x_in_features = self.in_dim
+                h_in_features = self.h_dim
+
+            # For each layers we need W_xz,W_hz,W_xg,W_hg,W_xr,W_hr matrices
+            # z_module: W_xz,W_hz
+            # r_module: W_xr,W_hr
+            # g_module: W_xg,W_hg
+
+            zx = nn.Linear(x_in_features, out_features, bias=True)
+            zh = nn.Linear(h_in_features, out_features, bias=False)
+            self.add_module("z_module_x" + str(layer), zx)
+            self.add_module("z_module_h" + str(layer), zh)
+
+            rx = nn.Linear(x_in_features, out_features, bias=True)
+            rh = nn.Linear(h_in_features, out_features, bias=False)
+            self.add_module("r_module_x" + str(layer), rx)
+            self.add_module("r_module_h" + str(layer), rh)
+
+            gx = nn.Linear(x_in_features, out_features, bias=True)
+            gh = nn.Linear(h_in_features, out_features, bias=False)
+            self.add_module("g_module_x" + str(layer), gx)
+            self.add_module("g_module_h" + str(layer), gh)
+
+            dp_module = nn.Dropout(dropout) # self.dropout = dropout probability.
+            self.add_module("dp_module_" + str(layer), dp_module)
+
+            # Append a tuple of 6 modules to the list.
+            self.layer_params.append((dp_module, zx, zh, rx, rh, gx, gh))
+
+        # Define the last - output module
+        out_module = nn.Linear(self.h_dim, self.out_dim)
+        self.add_module("out_module", out_module)
+        self.layer_params.append(out_module)
         # ========================
 
     def forward(self, input: Tensor, hidden_state: Tensor=None):
@@ -264,11 +314,62 @@ class MultilayerGRU(nn.Module):
         layer_input = input
         layer_output = None
 
+
+
         # TODO: Implement the model's forward pass.
         # You'll need to go layer-by-layer from bottom to top (see diagram).
         # Tip: You can use torch.stack() to combine multiple tensors into a
         # single tensor in a differentiable manner.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+
+        # TODO: What is it for?
+        layer_states.append(torch.zeros(batch_size, self.h_dim, device=input.device))
+        layer_output = torch.zeros(batch_size, seq_len, self.out_dim)
+
+        # print(self.layer_params)
+
+        # Feeding letters. i.e.
+        # First : feed all first letters in sequences.
+        # Then  : feed all second letters in sequences.
+        # etc.
+
+        # This loop iterates over time: i.e. :
+        #    ____     ____     ____    ____
+        #-> |    |-> |    |-> |    |->|    |->
+        #   |____|   |____|   |____|  |____|
+        #
+        for t in range(seq_len):
+
+            # Select the current input letters.
+            x = layer_input[:, t, :]
+
+            # This loop iterates over model layers.
+            # i.e. it takes the inputs to upper layer.
+            for layer in range(self.n_layers):
+                #print ("x input size=", x.size())
+                # Get all linear modules of this layers:
+                dropout, z_module_x, z_module_h_b, r_module_x, r_module_h_b, g_module_x, g_module_h_b = self.layer_params[layer]
+
+                h = layer_states[layer]
+
+                #print ("x,h sizes=", x.size(), h.size())
+                z = torch.sigmoid(z_module_x(x) + z_module_h_b(h))
+                r = torch.sigmoid(r_module_x(x) + r_module_h_b(h))
+                g = torch.tanh(g_module_x(x) + g_module_h_b(torch.mul(r, h)))
+                h = torch.mul(z, h) + torch.mul(1 - z, g)
+
+                # current input (x) is prev output (dp(h)).
+                x = dropout(h)
+
+                layer_states[layer + 1] = h
+
+            # Calc final output
+            output_module = self.layer_params[self.n_layers]
+            layer_output[:, t, :] = output_module(x)
+
+        # Save hidden_state (last layer_states)
+        hidden_state = torch.transpose(torch.stack(layer_states[0:-1]), 0, 1)
+
         # ========================
         return layer_output, hidden_state
+
