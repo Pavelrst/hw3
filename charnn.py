@@ -196,7 +196,35 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     # necessary for this. Best to disable tracking for speed.
     # See torch.no_grad().
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+
+    # TODO: convert the start seq to 1-hot vectors.
+    #print("start seq = ", start_sequence)
+    hidden_state = None
+    char_to_idx, idx_to_char = char_maps
+
+    while len(out_text) < n_chars:
+        one_hot_start_sequence = chars_to_onehot(out_text,char_to_idx)
+        one_hot_start_sequence.unsqueeze_(0)
+        one_hot_start_sequence = one_hot_start_sequence.float()
+        #print("one_hot_start_sequence and shape = ", one_hot_start_sequence, one_hot_start_sequence.size())
+
+        # TODO: feed the start seq to the model (first time without hidden state)
+        #print ("feed the start seq to the model")
+        layer_output, hidden_state = model.forward(one_hot_start_sequence, hidden_state)
+        #print ("layer_output",layer_output)
+        #print ("layer_output size",layer_output.size())
+        distribution = hot_softmax(layer_output,dim=1, temperature=T)
+        sampled_idx = torch.multinomial(distribution, 1).item()
+        #print ("sampled idx=", sampled_idx)
+        sampled_char = idx_to_char.get(sampled_idx)
+        #print ("sampled char=",sampled_char)
+        out_text = out_text + sampled_char
+        #print ("\n out_text len=",len(out_text))
+
+    # TODO: feed the seq + state to the model. the model will generate seq...
+
+    # TODO: proceed until len(sequence)==n_chars
+
     # ========================
 
     return out_text
@@ -352,7 +380,8 @@ class MultilayerGRU(nn.Module):
 
                 h = layer_states[layer]
 
-                #print ("x,h sizes=", x.size(), h.size())
+                #print ("x,h sizes=", x.size(), h.size(), " of types: ", type(x),type(h))
+                #print ("x=", x)
                 z = torch.sigmoid(z_module_x(x) + z_module_h_b(h))
                 r = torch.sigmoid(r_module_x(x) + r_module_h_b(h))
                 g = torch.tanh(g_module_x(x) + g_module_h_b(torch.mul(r, h)))
