@@ -207,7 +207,12 @@ class RNNTrainer(Trainer):
     def train_epoch(self, dl_train: DataLoader, **kw):
         # TODO: Implement modifications to the base method, if needed.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+
+        #print ("def train_epoch called")
+        # TODO: we need to handle somehoe the hidden state transfer between epochs.
+        self.model.train(True)  # set train mode
+        return self._foreach_batch(dl_train, self.train_batch, **kw)
+
         # ========================
         return super().train_epoch(dl_train, **kw)
 
@@ -231,7 +236,28 @@ class RNNTrainer(Trainer):
         # - Update params
         # - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        #print ("train batch called")
+        self.optimizer.zero_grad()
+
+        #if hasattr(self,'hidden_state'):
+        #    output, state =self.model.forward(x,self.hidden_state)
+        #else:
+        output, state = self.model.forward(x)
+        #self.hidden_state = state
+
+
+        # Input (GRU output): (N, C) where C = number of classes
+        # Target(    y     ): (N) where each value is 0 <= targets[i] <= C - 1
+        loss=self.loss_fn(torch.squeeze(output),torch.squeeze(y))
+
+        loss.backward() # retain_graph=True
+        self.optimizer.step()
+
+        # calculate number of correct predictions
+        pred_labels=torch.argmax(output,dim=2)
+        eq_veq=torch.eq(y,pred_labels)
+        num_correct=torch.sum(eq_veq)
+
         # ========================
 
         # Note: scaling num_correct by seq_len because each sample has seq_len
