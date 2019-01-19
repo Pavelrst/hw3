@@ -197,33 +197,41 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     # See torch.no_grad().
     # ====== YOUR CODE: ======
 
-    # TODO: convert the start seq to 1-hot vectors.
-    #print("start seq = ", start_sequence)
     hidden_state = None
     char_to_idx, idx_to_char = char_maps
 
+    # Prepare 1-hot vectors.
+    one_hot_start_sequence = chars_to_onehot(out_text, char_to_idx)
+    one_hot_start_sequence.unsqueeze_(0)
+    one_hot_start_sequence = one_hot_start_sequence.float()
+
+    # Feed the model
+    layer_output, hidden_state = model.forward(one_hot_start_sequence, hidden_state)
+    last_output_vector = layer_output[0,-1,]
+    distribution = hot_softmax(last_output_vector, dim=0, temperature=T)
+    sampled_idx = torch.multinomial(distribution, 1).item()
+    sampled_char = idx_to_char.get(sampled_idx)
+
+    out_text = out_text + sampled_char
+
+    # Now feed char by char
     while len(out_text) < n_chars:
-        one_hot_start_sequence = chars_to_onehot(out_text,char_to_idx)
-        one_hot_start_sequence.unsqueeze_(0)
-        one_hot_start_sequence = one_hot_start_sequence.float()
-        #print("one_hot_start_sequence and shape = ", one_hot_start_sequence, one_hot_start_sequence.size())
+        # Prepare 1-hot vectors.
+        input_char_one_hot = chars_to_onehot(sampled_char, char_to_idx)
+        input_char_one_hot.unsqueeze_(0)
+        input_char_one_hot = input_char_one_hot.float()
 
-        # TODO: feed the start seq to the model (first time without hidden state)
-        #print ("feed the start seq to the model")
-        layer_output, hidden_state = model.forward(one_hot_start_sequence, hidden_state)
-        #print ("layer_output",layer_output)
-        #print ("layer_output size",layer_output.size())
-        distribution = hot_softmax(layer_output,dim=1, temperature=T)
+        # Feed the model
+        layer_output, hidden_state = model.forward(input_char_one_hot, hidden_state)
+        distribution = hot_softmax(layer_output[0,0,], temperature=T)
         sampled_idx = torch.multinomial(distribution, 1).item()
-        #print ("sampled idx=", sampled_idx)
         sampled_char = idx_to_char.get(sampled_idx)
-        #print ("sampled char=",sampled_char)
-        out_text = out_text + sampled_char
-        #print ("\n out_text len=",len(out_text))
 
-    # TODO: feed the seq + state to the model. the model will generate seq...
+        if sampled_char != None: # Temp fix
+            out_text = out_text + sampled_char
+        else:
+            print ("sample char is None")
 
-    # TODO: proceed until len(sequence)==n_chars
 
     # ========================
 
