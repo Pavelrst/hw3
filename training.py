@@ -209,10 +209,19 @@ class RNNTrainer(Trainer):
         # ====== YOUR CODE: ======
 
         #print ("def train_epoch called")
-        # TODO: we need to handle somehoe the hidden state transfer between epochs.
+        # TODO: we need to handle somehow the hidden state transfer between epochs.
         self.model.train(True)  # set train mode
-        return self._foreach_batch(dl_train, self.train_batch, **kw)
 
+        #if not hasattr(self, 'hidden_state'):
+        self.hidden_state = None # zero state before each epoch
+
+        self.batch_num = 0
+        self.my_loss = 0
+        #if not hasattr(self, 'hidden_states'):
+        #    self.hidden_states = []
+
+        res = self._foreach_batch(dl_train, self.train_batch, **kw)
+        return res
         # ========================
         return super().train_epoch(dl_train, **kw)
 
@@ -236,24 +245,38 @@ class RNNTrainer(Trainer):
         # - Update params
         # - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        #print ("train batch called")
+        #print ("batch num = ",self.batch_num, "of size = ",x.size())
+
         self.optimizer.zero_grad()
 
-        #if hasattr(self,'hidden_state'):
-        #    output, state =self.model.forward(x,self.hidden_state)
+        #if len(self.hidden_states) <= self.batch_num:
+        #    # We dont have state
+            #print ("allocating state of batch num",self.batch_num)
+            #print ("allocating cell for state at batch num",self.batch_num)
+        #    output, state = self.model.forward(x)
+        #    self.hidden_states.append(state)
         #else:
-        output, state = self.model.forward(x)
-        #self.hidden_state = state
+            # We do have state
+            #print ("reusing existing state of batch num",self.batch_num)
+        #    state = self.hidden_states[self.batch_num]
+        #    output, state = self.model.forward(x,state)
+        #    self.hidden_states.append(state)
 
+        output, self.hidden_state = self.model.forward(x,self.hidden_state)
+        self.hidden_state = self.hidden_state.detach()
+        #self.hidden_state.requires_grad = True
+
+        self.batch_num += 1
 
         # Input (GRU output): (N, C) where C = number of classes
         # Target(    y     ): (N) where each value is 0 <= targets[i] <= C - 1
-        loss=self.loss_fn(torch.squeeze(output),torch.squeeze(y))
-
-        loss.backward() # retain_graph=True
+        self.my_loss = self.loss_fn(torch.squeeze(output), torch.squeeze(y))
+        self.my_loss.backward(retain_graph=True)  # retain_graph=True
         self.optimizer.step()
 
+
         # calculate number of correct predictions
+        # TODO: use softmax
         pred_labels=torch.argmax(output,dim=2)
         eq_veq=torch.eq(y,pred_labels)
         num_correct=torch.sum(eq_veq)
@@ -262,7 +285,7 @@ class RNNTrainer(Trainer):
 
         # Note: scaling num_correct by seq_len because each sample has seq_len
         # different predictions.
-        return BatchResult(loss.item(), num_correct.item() / seq_len)
+        return BatchResult(self.my_loss.item(), num_correct.item() / seq_len)
 
     def test_batch(self, batch) -> BatchResult:
         x, y = batch

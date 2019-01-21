@@ -343,6 +343,7 @@ class MultilayerGRU(nn.Module):
         layer_states = []
         for i in range(self.n_layers):
             if hidden_state is None:
+                # print ("state zeroed")
                 layer_states.append(torch.zeros(batch_size, self.h_dim, device=input.device))
             else:
                 layer_states.append(hidden_state[:, i, :])
