@@ -22,11 +22,20 @@ def char_maps(text: str):
     # It's best if you also sort the chars before assigning indices, so that
     # they're in lexical order.
     # ====== YOUR CODE: ======
-    sorted_letters = sorted(set(text))
-    idx_to_char = {}
-    for i in range (len(sorted_letters)):
-        idx_to_char[i]=sorted_letters[i]
-    char_to_idx = dict([[v,k] for k,v in idx_to_char.items()])
+    #sorted_letters = sorted(set(text))
+    #idx_to_char = {}
+    #for i in range (len(sorted_letters)):
+    #    idx_to_char[i]=sorted_letters[i]
+    #char_to_idx = dict([[v,k] for k,v in idx_to_char.items()])
+
+    # Create chars and indicies lists
+    chars = sorted(set(text))
+    chars_len = len(chars)
+    indices = list(range(chars_len))
+
+    # Create the dictionaries
+    char_to_idx = dict(zip(chars, indices))
+    idx_to_char = dict(zip(indices, chars))
     # ========================
     return char_to_idx, idx_to_char
 
@@ -42,11 +51,19 @@ def remove_chars(text: str, chars_to_remove):
     """
     # TODO: Implement according to the docstring.
     # ====== YOUR CODE: ======
-    beforeletters=len(text)
-    for i in range(len(chars_to_remove)):
-        text=text.replace(chars_to_remove[i],"")
-    n_removed=beforeletters-len(text)
-    text_clean=text
+    #beforeletters=len(text)
+    #for i in range(len(chars_to_remove)):
+    #    text=text.replace(chars_to_remove[i],"")
+    #n_removed=beforeletters-len(text)
+    #text_clean=text
+    text_len = len(text)
+    chars = ''.join(chars_to_remove)
+    chars = '[' + chars + ']'
+    #for ich in range(len(chars_to_remove)):
+    #    chars = chars + chars_to_remove[ich]
+    #chars = chars + ']'
+    text_clean = re.sub(chars, '', text)
+    n_removed = text_len - len(text_clean)
     # ========================
     return text_clean, n_removed
 
@@ -66,10 +83,19 @@ def chars_to_onehot(text: str, char_to_idx: dict) -> Tensor:
     """
     # TODO: Implement the embedding.
     # ====== YOUR CODE: ======
-    result = torch.zeros([len(text),len(char_to_idx)],dtype=torch.int8)
-    for i in range (len(text)):
-        j=char_to_idx[text[i]]
-        result[i,j]=1
+    #result = torch.zeros([len(text),len(char_to_idx)],dtype=torch.int8)
+    #for i in range (len(text)):
+    #    j=char_to_idx[text[i]]
+    #    result[i,j]=1
+
+    text_len = len(text)
+    dict_len = len(char_to_idx)
+
+    text_idx = [char_to_idx[j] for j in text]
+    text_idx = torch.tensor(text_idx)
+
+    result = torch.zeros([text_len, dict_len], dtype=torch.int8)
+    result.scatter_(1, text_idx.view(-1, 1), 1)
     # ========================
     return result
 
@@ -86,16 +112,24 @@ def onehot_to_chars(embedded_text: Tensor, idx_to_char: dict) -> str:
     """
     # TODO: Implement the reverse-embedding.
     # ====== YOUR CODE: ======
-    letters= torch.argmax(embedded_text,dim=1)
-    let = letters.numpy()
-    result = []
-    for i in range(len(letters)):
-#         idx = letters[i].numpy()
-#         index = 0
-#         index = idx[0,0]
-        letter=idx_to_char[let[i]]
-        result.append(letter)
-    result=''.join(result)
+    #letters= torch.argmax(embedded_text,dim=1)
+    #let = letters.numpy()
+    #result = []
+    #for i in range(len(letters)):
+#   #      idx = letters[i].numpy()
+#   #      index = 0
+#   #      index = idx[0,0]
+    #    letter=idx_to_char[let[i]]
+    #    result.append(letter)
+    #result=''.join(result)
+    result = ''
+    embedded_len = embedded_text.size(0)
+    _, idx = torch.max(embedded_text, 1)
+
+    idx = idx.numpy()
+    for embed in range(embedded_len):
+        letter = idx_to_char.get(idx[embed])
+        result = result + letter
     # ========================
     return result
 
@@ -124,27 +158,40 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int,
     # 3. Create the labels tensor in a similar way and convert to indices.
     # Note that no explicit loops are required to implement this function.
     # ====== YOUR CODE: ======
-    print('chars_to_labelled_samples called')
-    print("length of test is = ",len(text))
-    #embedded_text=chars_to_onehot(text,char_to_idx)
-    samples = torch.zeros([(len(text)-1)//seq_len,seq_len,len(char_to_idx)],dtype=torch.int8)
-    tensor = torch.zeros((),dtype=torch.int8)
-    labels = tensor.new_empty([(len(text)-1)//seq_len,seq_len])
-    i=0
-    indicator = 0
-    for letter in text:
-        indicator+=1
-        if indicator%50000 == 0:
-            print (indicator," letters processed")
-        embedded_letter = chars_to_onehot(letter,char_to_idx)
-        index = torch.argmax(embedded_letter,dim=1).numpy()
-        if ( i < len(text)-seq_len):
-            samples[i//seq_len,i%seq_len,index]=1
-        if ( i >= 1 and i <= len(text)-seq_len):
-            labels[(i-1)//seq_len,(i-1)%seq_len]=char_to_idx[letter]
-        i+=1
-            
-        
+    #print('chars_to_labelled_samples called')
+    #print("length of test is = ",len(text))
+    ##embedded_text=chars_to_onehot(text,char_to_idx)
+    #samples = torch.zeros([(len(text)-1)//seq_len,seq_len,len(char_to_idx)],dtype=torch.int8)
+    #tensor = torch.zeros((),dtype=torch.int8)
+    #labels = tensor.new_empty([(len(text)-1)//seq_len,seq_len])
+    #i=0
+    #indicator = 0
+    #for letter in text:
+    #    indicator+=1
+    #    if indicator%50000 == 0:
+    #        print (indicator," letters processed")
+    #    embedded_letter = chars_to_onehot(letter,char_to_idx)
+    #    index = torch.argmax(embedded_letter,dim=1).numpy()
+    #    if ( i < len(text)-seq_len):
+    #        samples[i//seq_len,i%seq_len,index]=1
+    #    if ( i >= 1 and i <= len(text)-seq_len):
+    #        labels[(i-1)//seq_len,(i-1)%seq_len]=char_to_idx[letter]
+    #    i+=1
+
+    #v = len(char_to_idx)
+    dict_len = len(char_to_idx)
+    #n_seqs = (len(text) - 1)//seq_len
+    num_of_seq = (len(text) - 1)//seq_len
+
+    #embed the text and reshape it
+    embed = chars_to_onehot(text, char_to_idx)
+    samples = embed[:num_of_seq*seq_len, :].view(num_of_seq, seq_len, dict_len)
+
+    #get all indicies of next letter and reshape it
+    idxs = [char_to_idx[j] for j in text]
+    idxs = torch.Tensor(idxs)
+    labels = idxs[1:num_of_seq*seq_len+1].view(num_of_seq, seq_len)
+
     # ========================
     return samples, labels
 
@@ -196,44 +243,33 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     # necessary for this. Best to disable tracking for speed.
     # See torch.no_grad().
     # ====== YOUR CODE: ======
+    b_debug = False
+    # prepare input to feed the GRU model
+    start_tensor = torch.unsqueeze(chars_to_onehot(start_sequence, char_to_idx), 0)
+    # print('start_tensor.shape', start_tensor.shape)
+    y, h_state = model(start_tensor.to(dtype=torch.float))
+    # print('y.shape', y.shape)
 
-    hidden_state = None
-    char_to_idx, idx_to_char = char_maps
-
-    # Prepare 1-hot vectors.
-    one_hot_start_sequence = chars_to_onehot(out_text, char_to_idx)
-    one_hot_start_sequence.unsqueeze_(0)
-    one_hot_start_sequence = one_hot_start_sequence.float()
-
-    # Feed the model
-    layer_output, hidden_state = model.forward(one_hot_start_sequence, hidden_state)
-    last_output_vector = layer_output[0,-1,]
-    distribution = hot_softmax(last_output_vector, dim=0, temperature=T)
-    sampled_idx = torch.multinomial(distribution, 1).item()
-    sampled_char = idx_to_char.get(sampled_idx)
-
-    out_text = out_text + sampled_char
-
-    # Now feed char by char
     while len(out_text) < n_chars:
-        # Prepare 1-hot vectors.
-        input_char_one_hot = chars_to_onehot(sampled_char, char_to_idx)
-        input_char_one_hot.unsqueeze_(0)
-        input_char_one_hot = input_char_one_hot.float()
-
-        # Feed the model
-        layer_output, hidden_state = model.forward(input_char_one_hot, hidden_state)
-        distribution = hot_softmax(layer_output[0,0,], temperature=T)
-        sampled_idx = torch.multinomial(distribution, 1).item()
-        sampled_char = idx_to_char.get(sampled_idx)
-
-        if sampled_char != None: # Temp fix
-            out_text = out_text + sampled_char
-        else:
-            print ("sample char is None")
-
-
-    # ========================
+        last_char_scores = torch.squeeze(y[0, -1, :])
+        if b_debug:
+            print('last_char_scores.shape', last_char_scores.shape)
+            print('last_char_scores', last_char_scores)
+        last_char_probs = hot_softmax(last_char_scores).data
+        if b_debug:
+            print('last_char_probs', last_char_probs)
+        char_idx = torch.multinomial(last_char_probs, 1)[0].item()
+        if b_debug:
+            print('char_idx', char_idx)
+        next_char = idx_to_char.get(char_idx)
+        if b_debug:
+            print('next_char', next_char)
+        s_next_char = str(next_char)
+        out_text = out_text + s_next_char
+        if len(out_text) < n_chars:
+            char_tensor = torch.unsqueeze(chars_to_onehot(s_next_char, char_to_idx), 0)
+            y, h_state = model(char_tensor.to(dtype=torch.float), h_state)
+        b_debug = False
 
     return out_text
 
@@ -298,24 +334,30 @@ class MultilayerGRU(nn.Module):
 
             zx = nn.Linear(x_in_features, out_features, bias=True)
             zh = nn.Linear(h_in_features, out_features, bias=False)
-            self.add_module("z_module_x" + str(layer), zx)
-            self.add_module("z_module_h" + str(layer), zh)
+            z_sigmoid = nn.Sigmoid()
+            self.add_module("z_module_x_" + str(layer), zx)
+            self.add_module("z_module_h_" + str(layer), zh)
+            self.add_module("z_sigmoid_" + str(layer), z_sigmoid)
 
             rx = nn.Linear(x_in_features, out_features, bias=True)
             rh = nn.Linear(h_in_features, out_features, bias=False)
-            self.add_module("r_module_x" + str(layer), rx)
-            self.add_module("r_module_h" + str(layer), rh)
+            r_sigmoid = nn.Sigmoid()
+            self.add_module("r_module_x_" + str(layer), rx)
+            self.add_module("r_module_h_" + str(layer), rh)
+            self.add_module("r_sigmoid_" + str(layer),r_sigmoid)
 
             gx = nn.Linear(x_in_features, out_features, bias=True)
             gh = nn.Linear(h_in_features, out_features, bias=False)
-            self.add_module("g_module_x" + str(layer), gx)
-            self.add_module("g_module_h" + str(layer), gh)
+            g_tanh = nn.Tanh()
+            self.add_module("g_module_x_" + str(layer), gx)
+            self.add_module("g_module_h_" + str(layer), gh)
+            self.add_module("g_tanh_" + str(layer), g_tanh)
 
             dp_module = nn.Dropout(dropout) # self.dropout = dropout probability.
             self.add_module("dp_module_" + str(layer), dp_module)
 
             # Append a tuple of 6 modules to the list.
-            self.layer_params.append((dp_module, zx, zh, rx, rh, gx, gh))
+            self.layer_params.append((zx, zh, z_sigmoid, rx, rh, r_sigmoid, gx, gh, g_tanh, dp_module))
 
         # Define the last - output module
         out_module = nn.Linear(self.h_dim, self.out_dim)
@@ -358,55 +400,49 @@ class MultilayerGRU(nn.Module):
         # Tip: You can use torch.stack() to combine multiple tensors into a
         # single tensor in a differentiable manner.
         # ====== YOUR CODE: ======
+        hidden_state = torch.zeros(batch_size, self.n_layers, self.h_dim, device=input.device)
 
-        # TODO: What is it for?
-        layer_states.append(torch.zeros(batch_size, self.h_dim, device=input.device))
-        layer_output = torch.zeros(batch_size, seq_len, self.out_dim)
+        next_layer_input = []
+        for i_layer in range(self.n_layers):
+            next_layer_input.append(torch.zeros(batch_size, seq_len, self.h_dim, device=input.device))
 
-        # print(self.layer_params)
+        for layer_idx in range(self.n_layers):
+            b_debug = False
+            h_prev = layer_states[layer_idx]
 
-        # Feeding letters. i.e.
-        # First : feed all first letters in sequences.
-        # Then  : feed all second letters in sequences.
-        # etc.
+            z_module_x, z_module_h_b, z_sig, r_module_x, r_module_h_b, r_sig, \
+            g_module_x, g_module_h_b, g_tanh, dropout = self.layer_params[layer_idx]
 
-        # This loop iterates over time: i.e. :
-        #    ____     ____     ____    ____
-        #-> |    |-> |    |-> |    |->|    |->
-        #   |____|   |____|   |____|  |____|
-        #
+            for t in range(seq_len):
+                x = layer_input[:, t, :]
+
+                # Cacl Z,R,G
+                Wx = z_module_x.forward(x)
+                Wh = z_module_h_b.forward(h_prev)
+                z = z_sig.forward(Wx + Wh)
+                Wx = r_module_x.forward(x)
+                Wh = r_module_h_b.forward(h_prev)
+                r = r_sig.forward(Wx + Wh)
+                Wx = g_module_x.forward(x)
+                Wh = g_module_h_b.forward(r * h_prev)
+                g = g_tanh.forward(Wx + Wh)
+
+                h = torch.mul(z, h_prev) + torch.mul(1 - z, g)
+                h_prev = h
+
+                # Give to next layer, the dropout of h.
+                h_dropped = dropout.forward(h)
+                next_layer_input[layer_idx][:, t, :] = h_dropped
+
+            hidden_state[:, layer_idx, :] = h
+            layer_input = next_layer_input[layer_idx]
+
+        # Generate the final output.
+        layer_output = torch.zeros(batch_size, seq_len, self.out_dim, device=input.device)
+        output_module = self.layer_params[self.n_layers]
         for t in range(seq_len):
-
-            # Select the current input letters.
             x = layer_input[:, t, :]
-
-            # This loop iterates over model layers.
-            # i.e. it takes the inputs to upper layer.
-            for layer in range(self.n_layers):
-                #print ("x input size=", x.size())
-                # Get all linear modules of this layers:
-                dropout, z_module_x, z_module_h_b, r_module_x, r_module_h_b, g_module_x, g_module_h_b = self.layer_params[layer]
-
-                h = layer_states[layer]
-
-                #print ("x,h sizes=", x.size(), h.size(), " of types: ", type(x),type(h))
-                #print ("x=", x)
-                z = torch.sigmoid(z_module_x(x) + z_module_h_b(h))
-                r = torch.sigmoid(r_module_x(x) + r_module_h_b(h))
-                g = torch.tanh(g_module_x(x) + g_module_h_b(torch.mul(r, h)))
-                h = torch.mul(z, h) + torch.mul(1 - z, g)
-
-                # current input (x) is prev output (dp(h)).
-                x = dropout(h)
-
-                layer_states[layer + 1] = h
-
-            # Calc final output
-            output_module = self.layer_params[self.n_layers]
-            layer_output[:, t, :] = output_module(x)
-
-        # Save hidden_state (last layer_states)
-        hidden_state = torch.transpose(torch.stack(layer_states[0:-1]), 0, 1)
+            layer_output[:, t, :] = output_module.forward(x)
 
         # ========================
         return layer_output, hidden_state
