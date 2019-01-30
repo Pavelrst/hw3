@@ -126,7 +126,7 @@ def onehot_to_chars(embedded_text: Tensor, idx_to_char: dict) -> str:
     embedded_len = embedded_text.size(0)
     _, idx = torch.max(embedded_text, 1)
 
-    idx = idx.numpy()
+    #idx = idx.numpy()
     for embed in range(embedded_len):
         letter = idx_to_char.get(idx[embed])
         result = result + letter
@@ -163,20 +163,6 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int,
     ##embedded_text=chars_to_onehot(text,char_to_idx)
     #samples = torch.zeros([(len(text)-1)//seq_len,seq_len,len(char_to_idx)],dtype=torch.int8)
     #tensor = torch.zeros((),dtype=torch.int8)
-    #labels = tensor.new_empty([(len(text)-1)//seq_len,seq_len])
-    #i=0
-    #indicator = 0
-    #for letter in text:
-    #    indicator+=1
-    #    if indicator%50000 == 0:
-    #        print (indicator," letters processed")
-    #    embedded_letter = chars_to_onehot(letter,char_to_idx)
-    #    index = torch.argmax(embedded_letter,dim=1).numpy()
-    #    if ( i < len(text)-seq_len):
-    #        samples[i//seq_len,i%seq_len,index]=1
-    #    if ( i >= 1 and i <= len(text)-seq_len):
-    #        labels[(i-1)//seq_len,(i-1)%seq_len]=char_to_idx[letter]
-    #    i+=1
 
     #v = len(char_to_idx)
     dict_len = len(char_to_idx)
@@ -186,12 +172,16 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int,
     #embed the text and reshape it
     embed = chars_to_onehot(text, char_to_idx)
     samples = embed[:num_of_seq*seq_len, :].view(num_of_seq, seq_len, dict_len)
+    #samples = samples.to(device)
 
     #get all indicies of next letter and reshape it
     idxs = [char_to_idx[j] for j in text]
     idxs = torch.Tensor(idxs)
     labels = idxs[1:num_of_seq*seq_len+1].view(num_of_seq, seq_len)
+    #labels = labels.to(device)
 
+    samples = samples.to(device)
+    labels = labels.to(device)
     # ========================
     return samples, labels
 
@@ -332,21 +322,21 @@ class MultilayerGRU(nn.Module):
             # r_module: W_xr,W_hr
             # g_module: W_xg,W_hg
 
-            zx = nn.Linear(x_in_features, out_features, bias=True)
+            zx = nn.Linear(x_in_features, out_features)
             zh = nn.Linear(h_in_features, out_features, bias=False)
             z_sigmoid = nn.Sigmoid()
             self.add_module("z_module_x_" + str(layer), zx)
             self.add_module("z_module_h_" + str(layer), zh)
             self.add_module("z_sigmoid_" + str(layer), z_sigmoid)
 
-            rx = nn.Linear(x_in_features, out_features, bias=True)
+            rx = nn.Linear(x_in_features, out_features)
             rh = nn.Linear(h_in_features, out_features, bias=False)
             r_sigmoid = nn.Sigmoid()
             self.add_module("r_module_x_" + str(layer), rx)
             self.add_module("r_module_h_" + str(layer), rh)
             self.add_module("r_sigmoid_" + str(layer),r_sigmoid)
 
-            gx = nn.Linear(x_in_features, out_features, bias=True)
+            gx = nn.Linear(x_in_features, out_features)
             gh = nn.Linear(h_in_features, out_features, bias=False)
             g_tanh = nn.Tanh()
             self.add_module("g_module_x_" + str(layer), gx)
@@ -401,20 +391,20 @@ class MultilayerGRU(nn.Module):
         # single tensor in a differentiable manner.
         # ====== YOUR CODE: ======
         hidden_state = torch.zeros(batch_size, self.n_layers, self.h_dim, device=input.device)
+        layer_input = layer_input.to(input.device)
 
         next_layer_input = []
         for i_layer in range(self.n_layers):
             next_layer_input.append(torch.zeros(batch_size, seq_len, self.h_dim, device=input.device))
 
         for layer_idx in range(self.n_layers):
-            b_debug = False
-            h_prev = layer_states[layer_idx]
+            h_prev = layer_states[layer_idx].to(input.device)
 
             z_module_x, z_module_h_b, z_sig, r_module_x, r_module_h_b, r_sig, \
             g_module_x, g_module_h_b, g_tanh, dropout = self.layer_params[layer_idx]
 
             for t in range(seq_len):
-                x = layer_input[:, t, :]
+                x = layer_input[:, t, :].to(input.device)
 
                 # Cacl Z,R,G
                 Wx = z_module_x.forward(x)
@@ -432,16 +422,16 @@ class MultilayerGRU(nn.Module):
 
                 # Give to next layer, the dropout of h.
                 h_dropped = dropout.forward(h)
-                next_layer_input[layer_idx][:, t, :] = h_dropped
+                next_layer_input[layer_idx][:, t, :] = h_dropped.to(input.device)
 
-            hidden_state[:, layer_idx, :] = h
-            layer_input = next_layer_input[layer_idx]
+            hidden_state[:, layer_idx, :] = h.to(input.device)
+            layer_input = next_layer_input[layer_idx].to(input.device)
 
         # Generate the final output.
         layer_output = torch.zeros(batch_size, seq_len, self.out_dim, device=input.device)
         output_module = self.layer_params[self.n_layers]
         for t in range(seq_len):
-            x = layer_input[:, t, :]
+            x = layer_input[:, t, :].to(input.device)
             layer_output[:, t, :] = output_module.forward(x)
 
         # ========================

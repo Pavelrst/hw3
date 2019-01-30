@@ -17,7 +17,14 @@ class EncoderCNN(nn.Module):
         # You can use any Conv layer parameters, use pooling or only strides,
         # use any activation functions, use BN or Dropout, etc.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        modules.append(nn.Conv2d(in_channels=in_channels, out_channels=16, kernel_size=5, stride=3, padding=1))  # b, 16, 10, 10
+        #         modules.append(nn.ReLU(True))
+        #         modules.append(nn.MaxPool2d(2, stride=2))  # b, 16, 5, 5
+        modules.append(nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=1))  # b, 8, 3, 3
+        #         modules.append(nn.ReLU(True))
+        #         modules.append(nn.MaxPool2d(2, stride=1))  # b, 8, 2, 2
+        modules.append(nn.Conv2d(8, out_channels, kernel_size=1, stride=1, padding=1))
+        #         modules.append(nn.ReLU(True))
         # ========================
         self.cnn = nn.Sequential(*modules)
 
@@ -39,7 +46,14 @@ class DecoderCNN(nn.Module):
         # Output should be a batch of images, with same dimensions as the
         # inputs to the Encoder were.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        modules.append(nn.ConvTranspose2d(in_channels, 8, kernel_size=1, stride=1, padding=1))
+        #         modules.append(nn.ReLU(True))
+        modules.append(nn.ConvTranspose2d(8, 16, kernel_size=3, stride=2, padding=1))
+        #         modules.append(nn.ReLU(True))
+        modules.append(nn.ConvTranspose2d(16, out_channels, kernel_size=5, stride=3, padding=1, output_padding=1))
+        #         modules.append(nn.ReLU(True))
+        #         modules.append(nn.Tanh())
+        #         modules.append(nn.Tanh())
         # ========================
         self.cnn = nn.Sequential(*modules)
 
@@ -67,7 +81,9 @@ class VAE(nn.Module):
 
         # TODO: Add parameters needed for encode() and decode().
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        self.fc1 = nn.Linear(n_features , z_dim)
+        self.fc2 = nn.Linear(n_features , z_dim)
+        self.fc3 = nn.Linear(z_dim , n_features)
         # ========================
 
     def _check_features(self, in_size):
@@ -87,7 +103,13 @@ class VAE(nn.Module):
         # log_sigma2 (mean and log variance) of the posterior p(z|x).
         # 2. Apply the reparametrization trick.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        features = self.features_encoder(x)
+        h = features.view(x.shape[0],-1)
+        mu = self.fc1(h).view(1,-1)
+        log_sigma2 = self.fc2(h).view(1,-1)
+        std = log_sigma2.mul(0.5).exp_()
+        u = torch.randn(*mu.size())
+        z = mu + std*u
         # ========================
 
         return z, mu, log_sigma2
@@ -97,7 +119,9 @@ class VAE(nn.Module):
         # 1. Convert latent to features.
         # 2. Apply features decoder.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        z_fl = self.fc3(z.view(-1,self.z_dim))
+        z_unfl = z_fl.view(-1,self.features_shape[0],self.features_shape[1],self.features_shape[2])
+        x_rec = self.features_decoder(z_unfl)
         # ========================
 
         # Scale to [-1, 1] (same dynamic range as original images).
@@ -111,7 +135,8 @@ class VAE(nn.Module):
             # Generate n latent space samples and return their reconstructions.
             # Remember that for the model, this is like inference.
             # ====== YOUR CODE: ======
-            raise NotImplementedError()
+            sample=torch.randn(n,self.z_dim)
+            samples=self.decode(sample)
             # ========================
         return samples
 
@@ -138,7 +163,9 @@ def vae_loss(x, xr, z_mu, z_log_sigma2, x_sigma2):
     # TODO: Implement the VAE pointwise loss calculation.
     # Remember that the covariance matrix of the posterior is diagonal.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    kldiv_loss = - torch.mean( 1 + z_log_sigma2 - z_mu.pow(2) - z_log_sigma2.exp() )
+    data_loss = F.mse_loss( xr, x, reduction='elementwise_mean' )/x_sigma2
+    loss = data_loss + kldiv_loss
     # ========================
 
     return loss, data_loss, kldiv_loss
