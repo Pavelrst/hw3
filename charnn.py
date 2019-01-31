@@ -112,24 +112,10 @@ def onehot_to_chars(embedded_text: Tensor, idx_to_char: dict) -> str:
     """
     # TODO: Implement the reverse-embedding.
     # ====== YOUR CODE: ======
-    #letters= torch.argmax(embedded_text,dim=1)
-    #let = letters.numpy()
-    #result = []
-    #for i in range(len(letters)):
-#   #      idx = letters[i].numpy()
-#   #      index = 0
-#   #      index = idx[0,0]
-    #    letter=idx_to_char[let[i]]
-    #    result.append(letter)
-    #result=''.join(result)
-    result = ''
-    embedded_len = embedded_text.size(0)
-    _, idx = torch.max(embedded_text, 1)
+    len,_ = embedded_text.size()
 
-    #idx = idx.numpy()
-    for embed in range(embedded_len):
-        letter = idx_to_char.get(idx[embed])
-        result = result + letter
+    list_result = [idx_to_char[(torch.argmax(embedded_text[i])).item()] for i in range(len)]
+    result = "".join(list_result)
     # ========================
     return result
 
@@ -160,25 +146,16 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int,
     # ====== YOUR CODE: ======
     #print('chars_to_labelled_samples called')
     #print("length of test is = ",len(text))
-    ##embedded_text=chars_to_onehot(text,char_to_idx)
-    #samples = torch.zeros([(len(text)-1)//seq_len,seq_len,len(char_to_idx)],dtype=torch.int8)
-    #tensor = torch.zeros((),dtype=torch.int8)
 
-    #v = len(char_to_idx)
     dict_len = len(char_to_idx)
-    #n_seqs = (len(text) - 1)//seq_len
     num_of_seq = (len(text) - 1)//seq_len
-
-    #embed the text and reshape it
     embed = chars_to_onehot(text, char_to_idx)
     samples = embed[:num_of_seq*seq_len, :].view(num_of_seq, seq_len, dict_len)
-    #samples = samples.to(device)
 
     #get all indicies of next letter and reshape it
     idxs = [char_to_idx[j] for j in text]
     idxs = torch.Tensor(idxs)
     labels = idxs[1:num_of_seq*seq_len+1].view(num_of_seq, seq_len)
-    #labels = labels.to(device)
 
     samples = samples.to(device)
     labels = labels.to(device)
@@ -233,33 +210,32 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     # necessary for this. Best to disable tracking for speed.
     # See torch.no_grad().
     # ====== YOUR CODE: ======
-    b_debug = False
-    # prepare input to feed the GRU model
-    start_tensor = torch.unsqueeze(chars_to_onehot(start_sequence, char_to_idx), 0)
-    # print('start_tensor.shape', start_tensor.shape)
-    y, h_state = model(start_tensor.to(dtype=torch.float))
-    # print('y.shape', y.shape)
+    ## prepare input to feed the GRU model
+    #start_tensor = torch.unsqueeze(chars_to_onehot(start_sequence, char_to_idx), 0)
 
-    while len(out_text) < n_chars:
-        last_char_scores = torch.squeeze(y[0, -1, :])
-        if b_debug:
-            print('last_char_scores.shape', last_char_scores.shape)
-            print('last_char_scores', last_char_scores)
-        last_char_probs = hot_softmax(last_char_scores).data
-        if b_debug:
-            print('last_char_probs', last_char_probs)
-        char_idx = torch.multinomial(last_char_probs, 1)[0].item()
-        if b_debug:
-            print('char_idx', char_idx)
-        next_char = idx_to_char.get(char_idx)
-        if b_debug:
-            print('next_char', next_char)
-        s_next_char = str(next_char)
-        out_text = out_text + s_next_char
-        if len(out_text) < n_chars:
-            char_tensor = torch.unsqueeze(chars_to_onehot(s_next_char, char_to_idx), 0)
-            y, h_state = model(char_tensor.to(dtype=torch.float), h_state)
-        b_debug = False
+    with torch.no_grad():
+        # Feed the model with first seq
+        num_of_chars = n_chars - len(start_sequence)
+        one_hot_seq = chars_to_onehot(start_sequence, char_to_idx)
+        seq_embed = torch.unsqueeze(one_hot_seq, 0)
+        scores, h_s = model(seq_embed.to(dtype=torch.float).to(device))
+
+        # Convert last char to propabilities
+        distribution = hot_softmax(scores[0, -1, :], temperature=T)
+        # Sample idx from distributuin
+        sampled_idx = torch.multinomial(distribution, 1).item()
+
+        for i in range(num_of_chars):
+            # Add char to final sequence
+            char = idx_to_char[sampled_idx]
+            out_text += char
+
+            # Feed, sample.
+            seq_embed = torch.unsqueeze(chars_to_onehot(char, char_to_idx), 0)
+            scores, h_s = model(seq_embed.to(dtype=torch.float).to(device), h_s.to(device))
+            distribution = hot_softmax(scores[0, -1, :], temperature=T)
+            sampled_idx = torch.multinomial(distribution, 1).item()
+    # ========================
 
     return out_text
 
@@ -397,23 +373,23 @@ class MultilayerGRU(nn.Module):
         for i_layer in range(self.n_layers):
             next_layer_input.append(torch.zeros(batch_size, seq_len, self.h_dim, device=input.device))
 
+        # Iterate over the layers - up.
         for layer_idx in range(self.n_layers):
             h_prev = layer_states[layer_idx].to(input.device)
 
             z_module_x, z_module_h_b, z_sig, r_module_x, r_module_h_b, r_sig, \
             g_module_x, g_module_h_b, g_tanh, dropout = self.layer_params[layer_idx]
 
+            # Iterate over the time - right
             for t in range(seq_len):
-                x = layer_input[:, t, :].to(input.device)
-
                 # Cacl Z,R,G
-                Wx = z_module_x.forward(x)
+                Wx = z_module_x.forward(layer_input[:, t, :])
                 Wh = z_module_h_b.forward(h_prev)
                 z = z_sig.forward(Wx + Wh)
-                Wx = r_module_x.forward(x)
+                Wx = r_module_x.forward(layer_input[:, t, :])
                 Wh = r_module_h_b.forward(h_prev)
                 r = r_sig.forward(Wx + Wh)
-                Wx = g_module_x.forward(x)
+                Wx = g_module_x.forward(layer_input[:, t, :])
                 Wh = g_module_h_b.forward(r * h_prev)
                 g = g_tanh.forward(Wx + Wh)
 
@@ -422,7 +398,7 @@ class MultilayerGRU(nn.Module):
 
                 # Give to next layer, the dropout of h.
                 h_dropped = dropout.forward(h)
-                next_layer_input[layer_idx][:, t, :] = h_dropped.to(input.device)
+                next_layer_input[layer_idx][:, t, :] = h_dropped
 
             hidden_state[:, layer_idx, :] = h.to(input.device)
             layer_input = next_layer_input[layer_idx].to(input.device)
@@ -431,8 +407,7 @@ class MultilayerGRU(nn.Module):
         layer_output = torch.zeros(batch_size, seq_len, self.out_dim, device=input.device)
         output_module = self.layer_params[self.n_layers]
         for t in range(seq_len):
-            x = layer_input[:, t, :].to(input.device)
-            layer_output[:, t, :] = output_module.forward(x)
+            layer_output[:, t, :] = output_module.forward(layer_input[:, t, :])
 
         # ========================
         return layer_output, hidden_state

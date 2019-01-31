@@ -247,16 +247,6 @@ class RNNTrainer(Trainer):
         #self.batch_num = 0
         self.last_hidden_state = None
 
-        #EpochResult = super().train_epoch(dl_train, **kw)
-        # print('Epoch Accuracy', EpochResult.accuracy)
-        #if EpochResult.accuracy > 90 and self.reduced_lr == 0:
-        #    self.reduced_lr = 1
-        #    for param_group in self.optimizer.param_groups:
-        #        old_lr = param_group['lr']
-        #        if old_lr > 0.001:
-        #            param_group['lr'] = 0.001
-        #            print('Learning rate from', old_lr, 'to', param_group['lr'])
-
         # ========================
         return super().train_epoch(dl_train, **kw)
 
@@ -287,6 +277,7 @@ class RNNTrainer(Trainer):
         num_correct = 0
         for seq_idx in range(batch_size):
             output, h_state = self.model.forward(x[seq_idx, :, :].unsqueeze(0), self.last_hidden_state)
+            h_state.detach()
             self.last_hidden_state = h_state
             loss += self.loss_fn(output[0, :, :], y[seq_idx, :])
 

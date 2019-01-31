@@ -103,12 +103,14 @@ class VAE(nn.Module):
         # log_sigma2 (mean and log variance) of the posterior p(z|x).
         # 2. Apply the reparametrization trick.
         # ====== YOUR CODE: ======
+        device = x.device
+
         features = self.features_encoder(x)
         h = features.view(x.shape[0],-1)
         mu = self.fc1(h).view(1,-1)
         log_sigma2 = self.fc2(h).view(1,-1)
         std = log_sigma2.mul(0.5).exp_()
-        u = torch.randn(*mu.size())
+        u = torch.randn(*mu.size(),device=device)
         z = mu + std*u
         # ========================
 
@@ -119,8 +121,11 @@ class VAE(nn.Module):
         # 1. Convert latent to features.
         # 2. Apply features decoder.
         # ====== YOUR CODE: ======
+        device = z.device
+
         z_fl = self.fc3(z.view(-1,self.z_dim))
         z_unfl = z_fl.view(-1,self.features_shape[0],self.features_shape[1],self.features_shape[2])
+        z_unfl = z_unfl.to(device)
         x_rec = self.features_decoder(z_unfl)
         # ========================
 
@@ -135,8 +140,9 @@ class VAE(nn.Module):
             # Generate n latent space samples and return their reconstructions.
             # Remember that for the model, this is like inference.
             # ====== YOUR CODE: ======
-            sample=torch.randn(n,self.z_dim)
+            sample=torch.randn(n,self.z_dim,device=device)
             samples=self.decode(sample)
+            samples = samples.cpu()#Need this!
             # ========================
         return samples
 

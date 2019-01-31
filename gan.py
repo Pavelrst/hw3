@@ -22,8 +22,8 @@ class Discriminator(nn.Module):
         # You can then use either an affine layer or another conv layer to
         # flatten the features.
         # ====== YOUR CODE: ======
-        ndf = in_size[1]  # nit a must
-        # input is (nc) x 64 x 64
+
+
         modules = []
 
         #class torch.nn.ConvTranspose2d(in_channels, out_channels, kernel_size,
@@ -31,6 +31,7 @@ class Discriminator(nn.Module):
 
         # We are used this manual:
         # https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
+        ndf = in_size[1]
         modules.append(nn.Conv2d(in_size[0], ndf, 4, 2, 1, bias=False))
         modules.append(nn.LeakyReLU(0.2, inplace=True))
         modules.append(nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False))
@@ -57,8 +58,8 @@ class Discriminator(nn.Module):
         # No need to apply sigmoid to obtain probability - we'll combine it
         # with the loss due to improved numerical stability.
         # ====== YOUR CODE: ======
-        output = self.discriminator(x)
-        y=output.view(-1, 1)
+        device = next(self.parameters()).device
+        y = self.discriminator(x).view(-1, 1).to(device)
         # ========================
         return y
 
@@ -79,37 +80,6 @@ class Generator(nn.Module):
         # section or implement something new.
         # You can assume a fixed image size.
         # ====== YOUR CODE: ======
-
-
-
-
-
-        # normalize the images between -1 and 1
-        # Tanh as the last layer of the generator output
-        # Use leaky ReLU
-
-        #self.generator = nn.Sequential(
-        #    #z_dim: Dimension of latent space.
-        #    nn.ConvTranspose2d(z_dim, ngf * 8, 4, 1, 0, bias=False),
-        #    nn.BatchNorm2d(ngf * 8),
-        #    nn.ReLU(True),
-        #    nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
-        #    nn.BatchNorm2d(ngf * 4),
-        #    nn.ReLU(True),
-        #    nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-        #    nn.BatchNorm2d(ngf * 2),
-        #    nn.ReLU(True),
-        #    nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
-        #    nn.BatchNorm2d(ngf),
-        #    nn.ReLU(True),
-        #    nn.ConvTranspose2d(ngf, out_channels, 4, 2, 1, bias=False),
-        #    nn.Tanh()
-        #)
-
-        #class torch.nn.ConvTranspose2d(in_channels, out_channels, kernel_size,
-        #stride=1, padding=0, output_padding=0, groups=1, bias=True, dilation=1)
-
-
         # We are used this pytorch manual:
         # https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
         ngf = 64
@@ -157,6 +127,8 @@ class Generator(nn.Module):
             samples = self.forward(z)
         else:
             samples = self.forward(z).data
+
+        samples = samples.to(device)
         # ========================
         return samples
 
@@ -170,8 +142,10 @@ class Generator(nn.Module):
         # Don't forget to make sure the output instances have the same scale
         # as the original (real) images.
         # ====== YOUR CODE: ======
-        z_unfl = z.view(-1, self.z_dim, 1, 1)
-        x = self.generator(z_unfl)
+        device = next(self.parameters()).device
+
+        z_unfl = z.view(-1, self.z_dim, 1, 1).to(device)
+        x = self.generator(z_unfl).to(device)
         # ========================
         return x
 
@@ -196,20 +170,20 @@ def discriminator_loss_fn(y_data, y_generated, data_label=0, label_noise=0.0):
     # See torch's BCEWithLogitsLoss for a numerically stable implementation.
     # ====== YOUR CODE: ======
 
-    # y_data: output class-scores of discriminator for real data.
-    # y_generated: output class-scores of discriminator for fake data.
-    # data_label: ground truth class of same real data.
+    device = y_data.device
+    # Distribution of labels (Uniform[data - noise/2, data + noise/2])
+    dist = torch.distributions.uniform.Uniform(data_label - label_noise / 2,
+                                               data_label + label_noise / 2)
+    y_data_fuzzy = dist.sample(y_data.shape).to(device)
 
-    # Fuzzy label for real data
-    y_data_fuzzy = torch.rand(y_data.shape[0]) * label_noise + data_label - label_noise / 2
+    # Flip 1 to 0 etc.
+    data_label = abs(1 - data_label)
+    dist = torch.distributions.uniform.Uniform(data_label - label_noise / 2, data_label + label_noise / 2)
+    y_generated_fuzzy = dist.sample(y_generated.shape).to(device)
 
-    # Fuzzy label for fake data - always near zero
-    data_label = 0
-    y_generated_fuzzy = torch.rand(y_generated.shape[0]) * label_noise + data_label - label_noise / 2
-
-    discriminator_loss = nn.BCEWithLogitsLoss()
-    loss_data = discriminator_loss(y_data, y_data_fuzzy)
-    loss_generated = discriminator_loss(y_generated, y_generated_fuzzy)
+    loss_fn = nn.BCEWithLogitsLoss()
+    loss_data = loss_fn(y_data, y_data_fuzzy)
+    loss_generated = loss_fn(y_generated, y_generated_fuzzy)
     # ========================
     return loss_data + loss_generated
 
@@ -228,14 +202,19 @@ def generator_loss_fn(y_generated, data_label=0):
     # Think about what you need to compare the input to, in order to
     # formulate the loss in terms of Binary Cross Entropy.
     # ====== YOUR CODE: ======
-    #print ("y_generated=",y_generated)
-    label = torch.FloatTensor(y_generated.shape[0])
-    label.data.resize_(y_generated.shape[0]).fill_(data_label)
-    #print ("label=",label)
+    ##print ("y_generated=",y_generated)
+    #label = torch.FloatTensor(y_generated.shape[0])
+    #label.data.resize_(y_generated.shape[0]).fill_(data_label)
+    ##print ("label=",label)
+    ## y_generated is what we get from discriminator. It tells if it real or fake.
+    #generator_loss = nn.BCEWithLogitsLoss()
+    #loss = generator_loss(y_generated, label)
 
+    device = y_generated.device
+    len = y_generated.size()[0]
+    loss_fn = nn.BCEWithLogitsLoss()
     # y_generated is what we get from discriminator. It tells if it real or fake.
-    generator_loss = nn.BCEWithLogitsLoss()
-    loss = generator_loss(y_generated, label)
+    loss = loss_fn(y_generated, torch.full((len,), data_label).to(device))
     # ========================
     return loss
 
@@ -264,14 +243,26 @@ def train_batch(dsc_model: Discriminator, gen_model: Generator,
     #d_loss.backward()
     #optimizer_D.step()
 
+    # Old - cuda problem
+    #dsc_optimizer.zero_grad()
+    ##real_labels = dsc_model.forward(x_data).view(-1)
+    ##fake_imgs = gen_model.sample(x_data.shape[0], with_grad=False)
+    ##fake_labels = dsc_model.forward(fake_imgs).view(-1)
+    ##dsc_loss = dsc_loss_fn(real_labels, fake_labels)
+    #dsc_loss = dsc_loss_fn(dsc_model.forward(x_data).view(-1),
+    #                       dsc_model.forward(gen_model.sample(x_data.shape[0], with_grad=False)).view(-1))
+    #dsc_loss.backward()
+    #dsc_optimizer.step()
+
+    n = x_data.shape[0]
     dsc_optimizer.zero_grad()
 
-    real_labels = dsc_model.forward(x_data).view(-1)
+    y_data = dsc_model.forward(x_data).view(-1)
 
-    fake_imgs = gen_model.sample(x_data.shape[0], with_grad=False)
-    fake_labels = dsc_model.forward(fake_imgs).view(-1)
+    x_generated = gen_model.sample(n, with_grad=False)
+    y_generated = dsc_model.forward(x_generated).view(-1)
 
-    dsc_loss = dsc_loss_fn(real_labels, fake_labels)
+    dsc_loss = dsc_loss_fn(y_data, y_generated)
     dsc_loss.backward()
 
     dsc_optimizer.step()
@@ -293,16 +284,21 @@ def train_batch(dsc_model: Discriminator, gen_model: Generator,
     #g_loss.backward()
     #optimizer_G.step()
 
+    # Old - cuda problem
+    #gen_optimizer.zero_grad()
+    ## Generate a batch of images
+    #fake_imgs = gen_model.sample(x_data.shape[0], with_grad=True)
+    #fake_labels = dsc_model.forward(fake_imgs).view(-1)
+    ## Loss measures generator's ability to fool the discriminator
+    #gen_loss = gen_loss_fn(fake_labels)
+    #gen_loss.backward()
+    #gen_optimizer.step()
+
     gen_optimizer.zero_grad()
-
-    # Generate a batch of images
-    fake_imgs = gen_model.sample(x_data.shape[0], with_grad=True)
-    fake_labels = dsc_model.forward(fake_imgs).view(-1)
-
-    # Loss measures generator's ability to fool the discriminator
-    gen_loss = gen_loss_fn(fake_labels)
+    x_generated = gen_model.sample(n, with_grad=True)
+    y_generated = dsc_model.forward(x_generated).view(-1)
+    gen_loss = gen_loss_fn(y_generated)
     gen_loss.backward()
-
     gen_optimizer.step()
     # ========================
 
