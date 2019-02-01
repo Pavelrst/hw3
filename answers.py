@@ -88,9 +88,9 @@ def part2_vae_hyperparams():
     # TODO: Tweak the hyperparameters to generate a former president.
     # ====== YOUR CODE: ======
     hypers = dict(
-    batch_size=2,
-    h_dim=25, z_dim=8, x_sigma2=0.9,
-    learn_rate=0.0002, betas=(0.9, 0.999))
+    batch_size=100,
+    h_dim=128, z_dim=64, x_sigma2=0.1,#0.5-good #0.9,
+    learn_rate=0.001, betas=(0.5,0.5))#(0.9, 0.999))
     # ========================
     return hypers
 

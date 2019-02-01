@@ -366,48 +366,84 @@ class MultilayerGRU(nn.Module):
         # Tip: You can use torch.stack() to combine multiple tensors into a
         # single tensor in a differentiable manner.
         # ====== YOUR CODE: ======
-        hidden_state = torch.zeros(batch_size, self.n_layers, self.h_dim, device=input.device)
+
+        # Inputs:
+        # Sequence and state: (green blocks)
         layer_input = layer_input.to(input.device)
 
-        next_layer_input = []
-        for i_layer in range(self.n_layers):
-            next_layer_input.append(torch.zeros(batch_size, seq_len, self.h_dim, device=input.device))
+        # Outputs:
+        hidden_state = torch.zeros(batch_size, self.n_layers, self.h_dim, device=input.device)
 
+        #next_layer_input = []
+        #for i_layer in range(self.n_layers):
+        #    next_layer_input.append(torch.zeros(batch_size, seq_len, self.h_dim, device=input.device))
+        next_layer_input = []
         # Iterate over the layers - up.
         for layer_idx in range(self.n_layers):
-            h_prev = layer_states[layer_idx].to(input.device)
+            # Get first input state
+            h = layer_states[layer_idx]
 
+            # Get the modules
             z_module_x, z_module_h_b, z_sig, r_module_x, r_module_h_b, r_sig, \
             g_module_x, g_module_h_b, g_tanh, dropout = self.layer_params[layer_idx]
 
             # Iterate over the time - right
             for t in range(seq_len):
                 # Cacl Z,R,G
-                Wx = z_module_x.forward(layer_input[:, t, :])
-                Wh = z_module_h_b.forward(h_prev)
-                z = z_sig.forward(Wx + Wh)
-                Wx = r_module_x.forward(layer_input[:, t, :])
-                Wh = r_module_h_b.forward(h_prev)
-                r = r_sig.forward(Wx + Wh)
-                Wx = g_module_x.forward(layer_input[:, t, :])
-                Wh = g_module_h_b.forward(r * h_prev)
-                g = g_tanh.forward(Wx + Wh)
+                x = layer_input[:, t, :].to(input.device)
+                z = z_sig(z_module_x(x) + z_module_h_b(h))
+                r = r_sig(r_module_x(x) + r_module_h_b(h))
+                g = g_tanh(g_module_x(x) + g_module_h_b(r * h))
+                h = torch.mul(z, h) + torch.mul(1 - z, g)
+                next_layer_input.append(dropout(h))
 
-                h = torch.mul(z, h_prev) + torch.mul(1 - z, g)
-                h_prev = h
-
-                # Give to next layer, the dropout of h.
-                h_dropped = dropout.forward(h)
-                next_layer_input[layer_idx][:, t, :] = h_dropped
-
-            hidden_state[:, layer_idx, :] = h.to(input.device)
-            layer_input = next_layer_input[layer_idx].to(input.device)
+            # Last output hidden state.
+            hidden_state[:, layer_idx, :] = h.detach()
+            layer_input = torch.stack(next_layer_input, dim=1)
 
         # Generate the final output.
         layer_output = torch.zeros(batch_size, seq_len, self.out_dim, device=input.device)
         output_module = self.layer_params[self.n_layers]
         for t in range(seq_len):
             layer_output[:, t, :] = output_module.forward(layer_input[:, t, :])
+        #layer_output = output_module.forward(layer_input)
+
+        #def hadamard_product(in1: Tensor, in2: Tensor):
+        #    return torch.mul(in1, in2)
+        ## Last hidden state for each layer.
+        #hidden_state = torch.zeros(batch_size, self.n_layers, self.h_dim, device=input.device)
+        #for layer in range(self.n_layers):
+        #    z_module_x, z_module_h_b, z_sig, r_module_x, r_module_h_b, r_sig, \
+        #    g_module_x, g_module_h_b, g_tanh, dropout = self.layer_params[layer]
+        #    current_layer_states = []
+        #    h = layer_states[layer]
+        #    for t in range(seq_len):
+        #        x = layer_input[:, t, :].to(input.device)
+#
+        #        z = z_sig(z_module_x(x) + z_module_h_b(h))
+        #        r = r_sig(r_module_x(x) + r_module_h_b(h))
+        #        g = g_tanh(g_module_x(x) + g_module_h_b(hadamard_product(r, h)))
+        #        h = hadamard_product(z, h) + hadamard_product(1 - z, g)
+        #        # h will go to the next timestep
+        #        # we need to save h as it is also a upper layer input.
+        #        current_layer_states.append(h)
+#
+        #    # Next layer input is a dropout of all states from prev layer.
+        #    layer_input = dropout(torch.stack(current_layer_states, dim=1))
+#
+        #    # Add hidden state from the current layer
+        #    # This is all hidden states - the Hn (left purple block)
+        #    hidden_state[:, layer, :] = h
+#
+        ## Calculate the output of the last RNN layer (Y)
+        #linear_hy = self.layer_params[self.n_layers]
+        #layer_output = linear_hy(layer_input)
+#
+        ## Final hidden state per layer.
+        ## dont need gradients: BPTT.
+        ## Hidden state saved for next batch.
+        #hidden_state = hidden_state.detach()
+        ##self.hidden_state = hidden_state
 
         # ========================
         return layer_output, hidden_state

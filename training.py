@@ -89,6 +89,8 @@ class Trainer(abc.ABC):
             # ====== YOUR CODE: ======
             # Train
             train_loss_tmp, train_acc_tmp = self.train_epoch(dl_train)
+            train_result = EpochResult(losses=train_loss_tmp, accuracy=train_acc_tmp)
+
 
             for loss in train_loss_tmp:
                 train_loss.extend([loss])
@@ -97,6 +99,7 @@ class Trainer(abc.ABC):
 
             # Test
             test_loss_tmp, test_acc_tmp = self.test_epoch(dl_test)
+            test_result = EpochResult(losses=test_loss_tmp, accuracy=test_acc_tmp)
 
             for loss in test_loss_tmp:
                 test_loss.extend([loss])
@@ -116,8 +119,6 @@ class Trainer(abc.ABC):
                 if epochs_without_improvement >= early_stopping:
                     break
 
-            train_result = EpochResult(losses=train_loss, accuracy=train_acc)
-            test_result = EpochResult(losses=test_loss, accuracy=test_acc)
             # ========================
 
             # Save model checkpoint if requested
@@ -275,21 +276,36 @@ class RNNTrainer(Trainer):
 
         loss = 0
         num_correct = 0
-        for seq_idx in range(batch_size):
-            output, h_state = self.model.forward(x[seq_idx, :, :].unsqueeze(0), self.last_hidden_state)
-            h_state.detach()
-            self.last_hidden_state = h_state
-            loss += self.loss_fn(output[0, :, :], y[seq_idx, :])
+        #for seq_idx in range(batch_size):
+        #    output, h_state = self.model.forward(x[seq_idx, :, :].unsqueeze(0), self.last_hidden_state)
+        #    h_state.detach()
+        #    self.last_hidden_state = h_state
+        #    loss += self.loss_fn(output[0, :, :], y[seq_idx, :])
+        #    # count correct results
+        #    _, max_indices = output[0, :, :].max(1)
+        #    num_correct += torch.numel(max_indices - y[seq_idx, :]) - \
+        #                   torch.nonzero(max_indices - y[seq_idx, :]).size(0)
 
-            # count correct results
-            _, max_indices = output[0, :, :].max(1)
+        output, h_state = self.model.forward(x, self.last_hidden_state)
+        h_state.detach()
+        self.last_hidden_state = h_state
+
+        for seq_idx in range(batch_size):
+            #loss += self.loss_fn(output[0, : , :], y[seq_idx, :])
+            loss += self.loss_fn(output[seq_idx, :, :], y[seq_idx, :])
+        # count correct results
+        #_, max_indices = output[0, :, :].max(1)
+        #num_correct += torch.numel(max_indices - y[seq_idx, :]) - \
+        #               torch.nonzero(max_indices - y[seq_idx, :]).size(0)
+            _, max_indices = output[seq_idx, :, :].max(1)
             num_correct += torch.numel(max_indices - y[seq_idx, :]) - \
                            torch.nonzero(max_indices - y[seq_idx, :]).size(0)
 
         loss.backward(retain_graph=True)
+        loss.detach()
         self.optimizer.step()
-        self.optimizer.zero_grad()
-        self.model.zero_grad()
+        #self.optimizer.zero_grad()
+        #self.model.zero_grad()
 
         # ========================
         # Note: scaling num_correct by seq_len because each sample has seq_len
@@ -303,7 +319,6 @@ class RNNTrainer(Trainer):
         y = y.to(self.device, dtype=torch.long)  # (B,S)
         seq_len = y.shape[1]
         batch_size = list(y.shape)[0]
-        self.batch_num = self.batch_num + 1
 
         with torch.no_grad():
             # TODO: Evaluate the RNN model on one batch of data.
@@ -327,7 +342,7 @@ class RNNTrainer(Trainer):
                               torch.nonzero(max_indices - y[seq_idx, :]).size(0)
                 num_correct += num_correct
             # ========================
-        return BatchResult(sum_loss.item(), num_correct / seq_len)
+        return BatchResult(loss.item(), num_correct / seq_len)
 
 
 class VAETrainer(Trainer):
